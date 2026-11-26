@@ -1,0 +1,89 @@
+{
+  "name": "cf-garmin-mcp",
+  "version": "1.0.0-dev.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "dev": "pnpm build:web && wrangler dev",
+    "dev:web": "vite --config apps/web/vite.config.ts",
+    "build:web": "vite build --config apps/web/vite.config.ts",
+    "build": "pnpm build:web && wrangler deploy --dry-run --outdir dist/worker",
+    "typecheck": "vue-tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p apps/worker/tsconfig.json && tsc --noEmit -p tests/tsconfig.json",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "check": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "deploy": "node scripts/validate-deploy.mjs && pnpm db:migrate:remote && wrangler deploy",
+    "secrets:local": "node scripts/local-secrets.mjs",
+    "auth:schema": "node scripts/generate-auth-schema.mjs",
+    "owner:recover": "node scripts/recover-owner.mjs",
+    "format": "prettier --write apps packages tests scripts *.mjs *.ts *.json *.jsonc *.yaml docs README.md THIRD_PARTY_NOTICES.md",
+    "backup": "node scripts/backup.mjs",
+    "restore": "node scripts/restore.mjs",
+    "validate:deploy": "node scripts/validate-deploy.mjs"
+  },
+  "cloudflare": {
+    "bindings": {
+      "BETTER_AUTH_SECRET": {
+        "description": "Independent application signing secret, at least 32 random characters."
+      },
+      "BOOTSTRAP_SECRET": {
+        "description": "One-time Owner initialization secret, at least 32 random characters. Remove after setup."
+      },
+      "PROVIDER_ENCRYPTION_KEY": {
+        "description": "Independent 32-byte base64 Garmin token encryption key; keep a backup."
+      },
+      "GARMIN_PERSONAL_API_KEY": {
+        "description": "Only required for personal_api mode; never sent to the browser."
+      },
+      "GARMIN_EMAIL": {
+        "description": "Only required for credentials mode."
+      },
+      "GARMIN_PASSWORD": {
+        "description": "Only required for credentials mode; raw string stored as a Worker Secret."
+      }
+    }
+  },
+  "dependencies": {
+    "@lucide/vue": "1.81.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "base-ui-vue": "0.5.0",
+    "better-auth": "1.7.28",
+    "echarts": "6.1.0",
+    "fflate": "0.8.3",
+    "fit-file-parser": "6.2.10",
+    "hono": "4.13.22",
+    "maplibre-gl": "6.19.0",
+    "pinia": "4.1.0",
+    "vue": "3.5.46",
+    "vue-router": "5.5.2",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@better-auth/oauth-provider": "1.7.28",
+    "@cloudflare/vitest-plugin": "1.9.2",
+    "@cloudflare/workers-types": "5.20261125.1",
+    "@eslint/js": "10.0.1",
+    "@tailwindcss/vite": "4.3.5",
+    "@types/node": "26.6.11",
+    "@vitejs/plugin-vue": "6.0.11",
+    "eslint": "10.15.0",
+    "eslint-plugin-vue": "10.12.1",
+    "jsonc-parser": "3.3.1",
+    "prettier": "3.10.1",
+    "tailwindcss": "4.3.5",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.74.0",
+    "vite": "8.4.0",
+    "vitest": "4.1.0",
+    "vue-eslint-parser": "10.4.2",
+    "vue-tsc": "3.3.14",
+    "wrangler": "4.168.0"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cf-garmin-mcp",
+  "main": "apps/worker/src/index.ts",
+  "compatibility_date": "2026-11-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./dist/web",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true,
+  },
+  "vars": {
+    "APP_URL": "http://localhost:8787",
+    "APP_TIMEZONE": "Asia/Shanghai",
+    "GARMIN_AUTH_MODE": "personal_api",
+    "GARMIN_REGION": "CN",
+    "PROVIDER_KEY_VERSION": "1",
+    "OSM_TILE_URL": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "MAX_FIT_BYTES": "16777216",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "cf-garmin-mcp",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "apps/worker/migrations",
+    },
+  ],
+  "r2_buckets": [
+    { "binding": "FIT_BUCKET", "bucket_name": "cf-garmin-mcp-fit" },
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "INSTANCE_GUARD", "class_name": "InstanceGuard" },
+      { "name": "GARMIN_AUTH", "class_name": "GarminAuth" },
+      { "name": "OAUTH_COORDINATOR", "class_name": "OAuthCoordinator" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["InstanceGuard"] },
+    { "tag": "v2", "new_sqlite_classes": ["GarminAuth", "OAuthCoordinator"] },
+  ],
+  "workflows": [
+    {
+      "binding": "SYNC_WORKFLOW",
+      "name": "cf-garmin-sync",
+      "class_name": "SyncWorkflow",
+    },
+  ],
+  "triggers": {
+    "crons": ["*/30 * * * *", "5 * * * *", "15 2 * * *", "30 2 * * 0"],
+  },
+  "observability": { "enabled": false },
+}

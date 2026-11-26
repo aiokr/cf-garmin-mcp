@@ -1,0 +1,5 @@
+{
+  "name": "@cf-garmin-mcp/worker",
+  "private": true,
+  "type": "module"
+}
