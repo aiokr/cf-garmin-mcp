@@ -6,15 +6,17 @@ import { number, object } from "../providers/garmin/mapper";
 const MAX_BYTES = 32 * 1024 * 1024;
 export function extractFit(
   input: Uint8Array<ArrayBuffer>,
+  maxBytes = MAX_BYTES,
 ): Uint8Array<ArrayBuffer> {
-  if (input.length > MAX_BYTES) throw new ServiceError("FIT_TOO_LARGE", 413);
+  const limit = Math.min(Math.max(maxBytes || MAX_BYTES, 1), MAX_BYTES);
+  if (input.length > limit) throw new ServiceError("FIT_TOO_LARGE", 413);
   if (input[0] === 0x50 && input[1] === 0x4b) {
     let selected = false;
     const files = unzipSync(input, {
       filter: (file) => {
         if (!/\.fit$/i.test(file.name) || selected) return false;
         if (
-          file.originalSize > MAX_BYTES ||
+          file.originalSize > limit ||
           file.originalSize / Math.max(1, file.size) > 200
         )
           throw new ServiceError("FIT_ARCHIVE_LIMIT", 413);
@@ -24,6 +26,7 @@ export function extractFit(
     });
     const fit = Object.values(files)[0];
     if (!fit) throw new ServiceError("FIT_MISSING_FROM_ARCHIVE", 502);
+    if (fit.length > limit) throw new ServiceError("FIT_TOO_LARGE", 413);
     return new Uint8Array(fit);
   }
   return input;

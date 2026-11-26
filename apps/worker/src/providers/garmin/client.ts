@@ -79,7 +79,7 @@ export async function providerRequest(
   if (operation === "file")
     return readBytes(
       response,
-      Math.min(Number(env.MAX_FIT_BYTES || 16_777_216), 33_554_432),
+      Math.min(Number(env.MAX_FIT_BYTES) || 16_777_216, 33_554_432),
     );
   if (response.status === 204)
     throw new ServiceError("PROVIDER_DATA_UNAVAILABLE", 404);

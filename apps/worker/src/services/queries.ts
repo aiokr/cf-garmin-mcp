@@ -167,7 +167,7 @@ export async function getActivityFile(
   )
     throw new ServiceError("ACTIVITY_FILE_UNAVAILABLE", 404);
   if (
-    object.size > Math.min(Number(env.MAX_FIT_BYTES || 16_777_216), 33_554_432)
+    object.size > Math.min(Number(env.MAX_FIT_BYTES) || 16_777_216, 33_554_432)
   )
     throw new ServiceError("FIT_TOO_LARGE", 413);
   const bytes = new Uint8Array(await object.arrayBuffer());

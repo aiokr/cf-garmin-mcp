@@ -65,7 +65,7 @@ export async function repairArchives(env: Env) {
       !file ||
       recovered >= 3 ||
       object.size >
-        Math.min(Number(env.MAX_FIT_BYTES || 16_777_216), 33_554_432)
+        Math.min(Number(env.MAX_FIT_BYTES) || 16_777_216, 33_554_432)
     ) {
       unindexed++;
       continue;

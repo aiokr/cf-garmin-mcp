@@ -159,6 +159,7 @@ export async function archiveActivity(
       await readProvider<Uint8Array<ArrayBuffer>>(env, row, "file", {
         id: activity.external_activity_id,
       }),
+      Math.min(Number(env.MAX_FIT_BYTES) || 16_777_216, 33_554_432),
     );
     // Validate before advertising a file as ready. Hash is part of the immutable key,
     // so an edited activity never silently changes the old object's identity.

@@ -129,6 +129,10 @@ describe.sequential(
       expect(
         extractFit(new Uint8Array(zipSync({ "synthetic.fit": bytes }))),
       ).toEqual(bytes);
+      const oversized = new Uint8Array(
+        zipSync({ "oversize.fit": new Uint8Array(1024).fill(65) }),
+      );
+      expect(() => extractFit(oversized, 256)).toThrow("FIT_ARCHIVE_LIMIT");
       const corrupt = new Uint8Array(bytes);
       corrupt[corrupt.length - 1] = corrupt.at(-1)! ^ 1;
       await expect(parseFit(corrupt)).rejects.toMatchObject({
