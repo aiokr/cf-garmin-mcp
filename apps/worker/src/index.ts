@@ -5,11 +5,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { oauthProviderAuthServerMetadata } from "@better-auth/oauth-provider";
 import { bootstrapSchema, type Owner } from "../../../packages/shared/src";
 import { createAuth } from "./auth/config";
-import {
-  constantTimeSecretEqual,
-  initializeOwner,
-  isInitialized,
-} from "./auth/bootstrap";
+import { initializeOwner, isInitialized } from "./auth/bootstrap";
 import { SCOPES } from "./auth/mcp";
 import { apiRoutes } from "./routes/api";
 import { mcpResponse } from "./mcp/server";
@@ -33,7 +29,6 @@ const messages: Record<string, string> = {
   NOT_CONFIGURED: "服务配置尚未完成。",
   ALREADY_INITIALIZED: "账户已创建。",
   INVALID_INPUT: "请检查输入内容。",
-  INVALID_BOOTSTRAP_SECRET: "初始化密钥无效。",
   RATE_LIMITED: "请求过于频繁，请稍后重试。",
   NOT_FOUND: "内容不存在。",
   PROVIDER_REAUTH_REQUIRED: "请重新验证 Garmin 连接。",
@@ -84,15 +79,6 @@ app.use("*", async (c, next) => {
   c.set("requestId", crypto.randomUUID());
   c.header("X-Request-Id", c.get("requestId"));
   c.header("Cache-Control", "no-store");
-  // Allow the configured tile origin, never a URL supplied in a request.
-  if (c.env.OSM_TILE_URL) {
-    const tile = new URL(c.env.OSM_TILE_URL);
-    if (tile.protocol === "https:")
-      c.header(
-        "Content-Security-Policy",
-        `default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: ${tile.origin}; connect-src 'self' ${tile.origin}; frame-ancestors 'none'; form-action 'self'; base-uri 'self'`,
-      );
-  }
   await next();
 });
 app.use(
@@ -134,9 +120,7 @@ app.get("/api/v1/instance", async (c) => {
   return c.json({
     data: {
       initialized,
-      bootstrapAvailable:
-        !initialized &&
-        Boolean(c.env.BOOTSTRAP_SECRET && c.env.BOOTSTRAP_SECRET.length >= 32),
+      bootstrapAvailable: !initialized,
       stage: "development",
     },
     requestId: c.get("requestId"),
@@ -145,18 +129,12 @@ app.get("/api/v1/instance", async (c) => {
 app.post("/api/v1/bootstrap", async (c) => {
   if (await isInitialized(c.env.DB))
     throw new ServiceError("ALREADY_INITIALIZED", 409);
-  if (!c.env.BOOTSTRAP_SECRET || c.env.BOOTSTRAP_SECRET.length < 32)
-    throw new ServiceError("NOT_CONFIGURED", 503);
   if (!(await throttle(c.env, "bootstrap", 5, 60)))
     throw new ServiceError("RATE_LIMITED", 429, 60);
   const parsed = bootstrapSchema.safeParse(
     await c.req.json().catch(() => null),
   );
   if (!parsed.success) throw new ServiceError("INVALID_INPUT");
-  if (
-    !(await constantTimeSecretEqual(parsed.data.secret, c.env.BOOTSTRAP_SECRET))
-  )
-    throw new ServiceError("INVALID_BOOTSTRAP_SECRET", 403);
   try {
     await initializeOwner(c.env, parsed.data);
   } catch (error) {

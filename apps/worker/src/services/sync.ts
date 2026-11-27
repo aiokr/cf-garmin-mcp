@@ -1,3 +1,4 @@
+import { APP_TIMEZONE } from "../config";
 import type { Env } from "../env";
 import { pruneSyncHistory } from "./sync-history";
 import { readProvider, type Connection } from "../durable-objects/garmin-auth";
@@ -117,7 +118,7 @@ export async function syncActivityPage(
     throw new ServiceError("INVALID_UPSTREAM_RESPONSE", 502);
   let count = 0;
   for (const value of raw) {
-    const activity = mapActivity(value, env.APP_TIMEZONE);
+    const activity = mapActivity(value, APP_TIMEZONE);
     if (!activity) throw new ServiceError("INVALID_ACTIVITY_RESPONSE", 502);
     const id = `${row.id}_${activity.external_activity_id}`;
     const hash = await sha256(JSON.stringify(activity));

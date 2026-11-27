@@ -10,9 +10,9 @@ D1 保存身份、衍生 token 密文、摘要、游标和授权；R2 私有归�
 
 ## 三层身份
 
-应用身份由 Better Auth 1.7.28 原生 D1 adapter 维护。关闭注册配置并使用 HTTP 路由白名单，D1 触发器进一步拒绝第二个用户。bootstrap 经 Origin、部署密钥、输入校验和限速后，以 D1 batch 原子插入 user/account/永久初始化状态。保留内部 UUID 和 role 扩展字段，未开放多用户接口。
+应用身份由 Better Auth 1.7.28 原生 D1 adapter 维护。关闭注册配置并使用 HTTP 路由白名单，D1 触发器进一步拒绝第二个用户。未初始化实例的 bootstrap 无需初始化密钥，用户首次访问以名字、邮箱和密码创建 Owner；经 Origin、输入校验和限速后，以 D1 batch 原子插入 user/account/永久初始化状态，创建后永久关闭入口。该流程不认证部署者，任何可访问者都可能抢先创建，需立即初始化或在外围限制全部入口。保留内部 UUID 和 role 扩展字段，未开放多用户接口。
 
-Garmin 原始凭据只来自环境。配置严格互斥；域名按 CN/GLOBAL 固定。密码模式独立移植 python-garminconnect 0.3.20 的 Mobile SSO/DI 协议；不引入 Python、TLS impersonation 或验证码绕过。上游阻止时停止。
+Cloudflare 部署脚本为缺失的内部认证密钥 `BETTER_AUTH_SECRET` 和 token 加密密钥 `PROVIDER_ENCRYPTION_KEY` 安全随机生成值，持久保存为 Worker Secret，重复部署复用、不自动轮换，不写入普通 vars 或源码。Garmin 原始凭据由模板 `.dev.vars.example` 提示输入，只来自环境，选择 API Key 或账号密码其中一组；应用登录后仍由 Owner 在设置页显式连接并完成 MFA。配置严格互斥；域名按 CN/GLOBAL 固定。密码模式独立移植 python-garminconnect 0.3.20 的 Mobile SSO/DI 协议；不引入 Python、TLS impersonation 或验证码绕过。上游阻止时停止。
 
 GarminAuth DO 对网络 await 使用显式 Promise 队列。每次读取 D1 状态和 token，不保留脱离数据库的明文缓存；到期续期后验证稳定账号 ID 再持久化，401 只刷新重试一次。环境指纹变更要求 Owner 显式验证；身份变更要求新 connection id。解绑与读取排队，解绑完成后即使环境 Secret 仍存在也不能自动重绑。
 

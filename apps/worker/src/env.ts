@@ -7,13 +7,10 @@ export interface Env {
   OAUTH_COORDINATOR: DurableObjectNamespace;
   SYNC_WORKFLOW: Workflow<{ runId: string }>;
   APP_URL: string;
-  APP_TIMEZONE: string;
   BETTER_AUTH_SECRET: string;
-  BOOTSTRAP_SECRET?: string;
   PROVIDER_ENCRYPTION_KEY?: string;
   PROVIDER_ENCRYPTION_KEY_PREVIOUS?: string;
   PROVIDER_KEY_VERSION?: string;
-  OSM_TILE_URL?: string;
   MAX_FIT_BYTES?: string;
   MCP_ALLOWED_ORIGINS?: string;
   GARMIN_AUTH_MODE: string;

@@ -15,7 +15,6 @@ const setup = computed(() => session.instance && !session.instance.initialized);
 const name = ref("");
 const email = ref("");
 const password = ref("");
-const secret = ref("");
 const busy = ref(false);
 async function submit() {
   busy.value = true;
@@ -31,10 +30,8 @@ async function submit() {
           name: name.value,
           email: email.value,
           password: password.value,
-          secret: secret.value,
         }),
       });
-      secret.value = "";
       password.value = "";
       await session.refresh();
       toasts.add("账户已创建，请使用刚才的邮箱和密码登录。");
@@ -55,7 +52,6 @@ async function submit() {
     );
   } finally {
     busy.value = false;
-    secret.value = "";
   }
 }
 </script>
@@ -93,7 +89,7 @@ async function submit() {
             !session.ready
               ? "服务暂时不可用，请确认部署配置后重试。"
               : setup
-                ? "设置登录账户。"
+                ? "设置唯一 Owner 的邮箱和密码，无需初始化 Key。部署后请立即创建账户，首个完成创建的访问者将成为 Owner。"
                 : "登录后，继续探索你的运动与健康。"
           }}
         </p>
@@ -124,16 +120,8 @@ async function submit() {
                 :minlength="setup ? 12 : undefined"
                 maxlength="128"
               /><small v-if="setup">至少 12 个字符。</small></label
-            ><label v-if="setup" for="secret"
-              >一次性初始化密钥<input
-                id="secret"
-                v-model="secret"
-                type="password"
-                autocomplete="off"
-                required
-                minlength="32"
-                maxlength="256" /><small></small></label
-          ></template>
+            ></template
+          >
           <p v-if="session.error" class="form-message error-text" role="alert">
             {{ session.error }}
           </p>
@@ -142,7 +130,7 @@ async function submit() {
             class="error-text"
             role="alert"
           >
-            部署者尚未设置初始化密钥。
+            初始化暂不可用，请刷新页面确认实例状态。
           </p>
           <Button
             class="button primary full-width"

@@ -1,3 +1,4 @@
+import { APP_TIMEZONE } from "../config";
 import { z } from "zod";
 import type { Env } from "../env";
 import type { Connection } from "../durable-objects/garmin-auth";
@@ -270,7 +271,7 @@ export async function dashboard(env: Env, userId: string, date: string) {
       : "fresh";
   return {
     date,
-    timezone: env.APP_TIMEZONE,
+    timezone: APP_TIMEZONE,
     source: "garmin" as const,
     connectionId: connection?.id || null,
     freshness: { lastSuccessfulSync, status },
@@ -285,8 +286,8 @@ export async function dashboard(env: Env, userId: string, date: string) {
     training,
   };
 }
-export function defaultRange(env: Env) {
-  const end = dateInZone(env.APP_TIMEZONE);
+export function defaultRange(_env: Env) {
+  const end = dateInZone(APP_TIMEZONE);
   const start = new Date(Date.parse(end) - 29 * 86_400_000)
     .toISOString()
     .slice(0, 10);

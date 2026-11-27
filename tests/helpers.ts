@@ -13,7 +13,6 @@ export async function fixture() {
     name: "Fixture Owner",
     email: "fixture@example.test",
     password: "Fixture-test-password-2026!",
-    secret: "fixture-only-not-a-real-secret-value",
   });
   const user = await env.DB.prepare('SELECT id FROM "user"').first<{
     id: string;

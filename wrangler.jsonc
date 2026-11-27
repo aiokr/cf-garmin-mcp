@@ -14,22 +14,22 @@
   },
   "vars": {
     "APP_URL": "http://localhost:8787",
-    "APP_TIMEZONE": "Asia/Shanghai",
     "GARMIN_AUTH_MODE": "credentials",
     "GARMIN_REGION": "CN",
     "PROVIDER_KEY_VERSION": "1",
-    "OSM_TILE_URL": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
     "MAX_FIT_BYTES": "16777216",
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "cf-garmin-mcp",
+      // Local placeholder. Deploy button / prepare-deploy resolves the real UUID before migrations.
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "apps/worker/migrations",
     },
   ],
   "r2_buckets": [
+    // Provisioned automatically for button deployments; keep public access disabled.
     { "binding": "FIT_BUCKET", "bucket_name": "cf-garmin-mcp-fit" },
   ],
   "durable_objects": {

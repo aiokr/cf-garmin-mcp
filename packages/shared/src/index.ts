@@ -39,7 +39,6 @@ export const bootstrapSchema = z
       .max(254)
       .transform((value) => value.toLowerCase()),
     password: z.string().min(12).max(128),
-    secret: z.string().min(32).max(256),
   })
   .strict();
 

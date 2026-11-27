@@ -1,3 +1,4 @@
+import { APP_TIMEZONE } from "../config";
 import type { Env } from "../env";
 import type { Connection } from "../durable-objects/garmin-auth";
 import { dateInZone, startSync } from "./sync";
@@ -42,7 +43,7 @@ export async function runScheduled(env: Env, cron: string) {
           ? ["training"]
           : ["devices"];
   for (const connection of rows.results) {
-    const end = dateInZone(env.APP_TIMEZONE);
+    const end = dateInZone(APP_TIMEZONE);
     for (const stream of streams) {
       if (stream === "training" && connection.auth_type === "personal_api")
         continue;

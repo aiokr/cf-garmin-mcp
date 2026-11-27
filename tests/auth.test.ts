@@ -10,13 +10,11 @@ import type { D1Migration } from "cloudflare:test";
 
 const env = workerEnv as unknown as Env & { TEST_MIGRATIONS: D1Migration[] };
 const origin = "https://garmin.test";
-const secret = "test-only-bootstrap-secret-at-least-32-characters";
 const password = "Original-test-password-2026";
 const owner = {
   name: "Test Owner",
   email: "owner@example.test",
   password,
-  secret,
 };
 const request = (
   path: string,
@@ -63,10 +61,10 @@ describe.sequential("single-owner lifecycle in Workers + D1 + DO", () => {
       (
         await request("/api/v1/bootstrap", {
           ...owner,
-          secret: "wrong-secret-value-longer-than-32-characters",
+          password: "short",
         })
       ).status,
-    ).toBe(403);
+    ).toBe(400);
     expect(
       (
         await env.DB.prepare('SELECT count(*) AS n FROM "user"').first<{
@@ -76,7 +74,11 @@ describe.sequential("single-owner lifecycle in Workers + D1 + DO", () => {
     ).toBe(0);
   });
 
-  it("atomically creates one owner under concurrent bootstrap requests and permanently closes bootstrap", async () => {
+  it("creates one owner without any bootstrap key under concurrent requests and permanently closes bootstrap", async () => {
+    const initial = await (
+      await request("/api/v1/instance")
+    ).json<{ data: { bootstrapAvailable: boolean } }>();
+    expect(initial.data.bootstrapAvailable).toBe(true);
     const responses = await Promise.all([
       request("/api/v1/bootstrap", owner),
       request("/api/v1/bootstrap", { ...owner, email: "racer@example.test" }),
@@ -102,7 +104,6 @@ describe.sequential("single-owner lifecycle in Workers + D1 + DO", () => {
       password: string;
     }>();
     expect(account?.password).not.toBe(password);
-    expect(account?.password).not.toContain(secret);
     expect((await request("/api/v1/bootstrap", owner)).status).toBe(409);
     const status = await (
       await request("/api/v1/instance")

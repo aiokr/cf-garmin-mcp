@@ -2,22 +2,6 @@ import { hashPassword } from "better-auth/crypto";
 import type { BootstrapInput } from "../../../../packages/shared/src";
 import type { Env } from "../env";
 
-export async function constantTimeSecretEqual(
-  supplied: string,
-  expected: string,
-): Promise<boolean> {
-  const encode = new TextEncoder();
-  const [a, b] = await Promise.all([
-    crypto.subtle.digest("SHA-256", encode.encode(supplied)),
-    crypto.subtle.digest("SHA-256", encode.encode(expected)),
-  ]);
-  const left = new Uint8Array(a);
-  const right = new Uint8Array(b);
-  let difference = 0;
-  for (let i = 0; i < left.length; i++) difference |= left[i]! ^ right[i]!;
-  return difference === 0;
-}
-
 export async function initializeOwner(
   env: Env,
   input: BootstrapInput,

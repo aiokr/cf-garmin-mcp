@@ -9,7 +9,6 @@ export default defineConfig({
         bindings: {
           APP_URL: "https://garmin.test",
           BETTER_AUTH_SECRET: "test-only-signing-secret-at-least-32-characters",
-          BOOTSTRAP_SECRET: "test-only-bootstrap-secret-at-least-32-characters",
           GARMIN_PERSONAL_API_KEY: "test-only-not-a-real-api-key",
           GARMIN_AUTH_MODE: "personal_api",
           GARMIN_EMAIL: "",

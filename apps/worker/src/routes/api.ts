@@ -1,3 +1,4 @@
+import { APP_TIMEZONE, OSM_TILE_URL } from "../config";
 import { Hono } from "hono";
 import { z } from "zod";
 import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
@@ -48,7 +49,7 @@ apiRoutes.get("/me", (c) =>
 apiRoutes.get("/dashboard", async (c) => {
   const date = parsed(
     dateSchema,
-    c.req.query("date") || dateInZone(c.env.APP_TIMEZONE),
+    c.req.query("date") || dateInZone(APP_TIMEZONE),
   );
   return c.json({
     data: await dashboard(c.env, c.get("owner").id, date),
@@ -299,11 +300,11 @@ apiRoutes.post("/sync", async (c) => {
   );
   if (!connection || connection.status !== "connected")
     throw new ServiceError("PROVIDER_REAUTH_REQUIRED", 409);
-  const end = value.end || dateInZone(c.env.APP_TIMEZONE);
+  const end = value.end || dateInZone(APP_TIMEZONE);
   const start =
     value.start ||
     new Date(Date.parse(end) - 6 * 86_400_000).toISOString().slice(0, 10);
-  if (start > end || end > dateInZone(c.env.APP_TIMEZONE))
+  if (start > end || end > dateInZone(APP_TIMEZONE))
     throw new ServiceError("INVALID_DATE_RANGE");
   if (
     value.stream !== "activities" &&
@@ -384,9 +385,8 @@ apiRoutes.get("/settings", async (c) => {
         auto_sync: 1,
         archive_fit: 1,
       }),
-      mapTileUrl:
-        c.env.OSM_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-      timezone: c.env.APP_TIMEZONE,
+      mapTileUrl: OSM_TILE_URL,
+      timezone: APP_TIMEZONE,
       mcpUrl: new URL(c.env.APP_URL).origin + "/mcp",
     },
     requestId: c.get("requestId"),
@@ -517,7 +517,7 @@ apiRoutes.get("/oauth/request", async (c) => {
 async function queueInitialSync(env: Env, userId: string, id: string) {
   const connection = await ownerConnection(env, userId, id);
   if (!connection || connection.status !== "connected") return;
-  const end = dateInZone(env.APP_TIMEZONE);
+  const end = dateInZone(APP_TIMEZONE);
   const start = new Date(Date.parse(end) - 6 * 86_400_000)
     .toISOString()
     .slice(0, 10);

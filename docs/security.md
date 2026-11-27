@@ -2,7 +2,11 @@
 
 ## 应用与授权
 
-公开注册同时在 Better Auth 配置、HTTP handler 和 D1 单用户约束中关闭。Bootstrap 必须有规范 Origin 和一次性部署密钥；D1 batch 保证 user/account/永久初始化标志一起提交。任何请求不能自报 user id、role 或加密上下文。
+常规公开注册在 Better Auth 配置和 HTTP handler 中关闭，D1 单用户约束阻止第二个用户。仅未初始化实例开放首次 Owner 创建：无需 bootstrap key，以名字、邮箱和密码创建；请求仍须通过规范 Origin、输入校验与限流。D1 batch 保证 user/account/永久初始化标志一起提交，并发时只能有一个请求成功；初始化后永久关闭创建入口。任何请求不能自报 user id、role 或加密上下文。
+
+**首访抢占是明确的安全取舍：未初始化时，任何能访问该实例的人都可能先成为 Owner；规范 Origin 和限流并不能认证部署者。** 部署后应立即完成初始化，在此之前不要公开或分享 URL；需要保障时在外围限制所有入口，包括 workers.dev 和自定义域名。若已被抢占，不要通过删除用户或初始化标志重新开放创建，应由有 Cloudflare/数据库权限的部署者按维护恢复流程处置。
+
+Cloudflare 部署脚本为缺失的 `BETTER_AUTH_SECRET` 和 `PROVIDER_ENCRYPTION_KEY` 生成独立安全随机值，并持久保存为 Worker Secret；已有 Secret 在重建/部署中保留，不因部署自动轮换。密钥不进入普通 vars、Git 或日志；provider key 必须安全备份，丢失后无法解密已有 Garmin token。不要将内部密钥作为首次创建 Owner 的人工输入，也不要保留对 `BOOTSTRAP_SECRET` 的依赖。
 
 InstanceGuard 持久化限制初始化每分钟 5 次、登录 10 次、OAuth 协议 30 次，Better Auth 额外启用数据库限流。全实例限速可能暂时影响 Owner，可在外围再配置精确限流。
 
@@ -10,7 +14,7 @@ InstanceGuard 持久化限制初始化每分钟 5 次、登录 10 次、OAuth �
 
 ## Garmin
 
-原始密码/API Key 只来自 Cloudflare Secret bindings（本地为 gitignore 的 .dev.vars）；数据库仅存 AES-256-GCM 衍生 token，随机 96-bit IV、版本化 key，AAD 绑定 Owner/connection/provider/region/purpose。原始凭据和 MFA code 不记录日志或写入浏览器存储。
+原始密码/API Key 只来自 Cloudflare Secret bindings（模板由 `.dev.vars.example` 提示，只填所选模式的一组；本地为 gitignore 的 .dev.vars），Owner 登录后仍须在设置页连接和完成 MFA；数据库仅存 AES-256-GCM 衍生 token，随机 96-bit IV、版本化 key，AAD 绑定 Owner/connection/provider/region/purpose。原始凭据和 MFA code 不记录日志或写入浏览器存储。
 
 MFA pending Cookie 加密保存在 DO，随机 challenge 绑定原会话，TTL 10 分钟、最多 5 次。配置或区服变更须重新验证，不同账号不能沿用旧连接。断开后清除密文和临时状态，暂停同步；环境凭据存在也不能自动重绑。
 

@@ -6,6 +6,16 @@
 
 Node.js 24.12+，pnpm 10.33.0。运行 `pnpm install --frozen-lockfile` → `pnpm secrets:local` → `pnpm db:migrate:local` → `pnpm dev`。规范 origin 为 `http://localhost:8787`，其他端口/127.0.0.1 的写请求不接受。生产 HTTPS Cookie 启用 Secure/HttpOnly/SameSite=Lax；本地 HTTP 仅为开发关闭 Secure。
 
+## 按钮部署与资源自动准备
+
+完整的浏览器操作步骤见 [README 一键部署](../README.md#一键部署)。源仓库公开后可使用官方 Deploy 按钮；私有仓库通过 Workers Builds 连接自己的仓库。构建目录为根目录，构建命令 `pnpm build`，部署命令 `pnpm run deploy`。
+
+Workers Builds 中 `pnpm run deploy` 首先运行 `scripts/prepare-deploy.mjs`，使用构建环境的 `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN`（D1 Write、Workers R2 Storage Write、Workers Scripts Write）。平台已预建的资源直接复用；D1 UUID 尚未分配时按配置的准确名称查找或创建数据库，再写入实际 UUID；R2 不存在时自动创建私有 Bucket，已有 Bucket 必须关闭 r2.dev 和公共自定义域名。脚本不删除数据库/对象，不会替换明确配置但已失效的 D1 UUID，权限不足会停止部署。
+
+`APP_URL` 保留默认 `http://localhost:8787` 即可，prepare 脚本查询账户子域名并自动生成正式的 HTTPS workers.dev 地址；仅自定义域名时改为实际 HTTPS origin（无子路径），显式的生产地址会保留。构建变量 `APP_URL`、`GARMIN_AUTH_MODE`、`GARMIN_REGION` 可覆盖本次运行配置。`PROVIDER_KEY_VERSION` 保留默认 `1`，仅轮换 Garmin token 加密密钥时按维护流程递增。日期统计与展示固定使用内置 `Asia/Shanghai`，地图固定使用内置 OSM 默认底图 `https://tile.openstreetmap.org/{z}/{x}/{y}.png`；Cloudflare 配置无需填写 `APP_TIMEZONE` 或 `OSM_TILE_URL`，也不通过环境变量覆盖它们。仅非敏感配置写入 wrangler.jsonc，不写入 API Token、Garmin Secret 或自动生成的内部 Secret；内部认证/加密密钥按缺失创建到 Worker Secret，已有值保留。配置准备成功后才进行校验、远程迁移和发布；构建工作区的修改不会自动提交到 Git。
+
+账户需先启用 R2；自动建 Bucket 不能代替服务开通。同一账户多个实例必须使用不同的 D1/R2/Workflow 名称。资源自动准备已有模拟测试覆盖资源创建、重复复用、平台预建、权限错误、私有访问及配置隔离；这些证据不等于免密钥初始化或内部 Secret 持久化已通过真实云端验收。完整按钮、Secret 首次生成/重复部署保留和 Workflows 创建仍需独立账户真实验收。
+
 ## 手动部署
 
 ```sh
@@ -14,32 +24,31 @@ pnpm exec wrangler d1 create cf-garmin-mcp
 pnpm exec wrangler r2 bucket create cf-garmin-mcp-fit
 ```
 
-修改根 wrangler.jsonc：填写返回的 D1 UUID，配置真实 HTTPS APP_URL（无子路径）、IANA 时区、Garmin 模式和区域。资源名称冲突时同时调整 Worker、Bucket 和 Workflow 名称。R2 保持私有，不启用 r2.dev 或公共域名。预览 URL 默认关闭；检查自定义域名和 workers.dev 两个入口。
+修改根 wrangler.jsonc：填写返回的 D1 UUID，按账号选择 Garmin 模式和区域。`APP_URL` 默认 `http://localhost:8787` 不必修改，prepare 会自动生成线上 workers.dev 地址；仅自定义域名时填写实际 HTTPS origin（无子路径）。`PROVIDER_KEY_VERSION` 默认 `1` 不必修改，只有密钥轮换时才递增。时区与地图底图使用内置固定默认值，无需填写。资源名称冲突时同时调整 Worker、Bucket 和 Workflow 名称。R2 保持私有，不启用 r2.dev 或公共域名。预览 URL 默认关闭；检查自定义域名和 workers.dev 两个入口。
 
 ```sh
-pnpm exec wrangler secret put BETTER_AUTH_SECRET
-pnpm exec wrangler secret put BOOTSTRAP_SECRET
-pnpm exec wrangler secret put PROVIDER_ENCRYPTION_KEY
+# 准备 CLOUDFLARE_ACCOUNT_ID 和 CLOUDFLARE_API_TOKEN 供部署脚本使用。
+# 内部认证/加密密钥由脚本按缺失创建并持久复用，无需手动填写。
 # personal_api 模式：
 pnpm exec wrangler secret put GARMIN_PERSONAL_API_KEY
 # 或 credentials 模式：
 # pnpm exec wrangler secret put GARMIN_EMAIL
 # pnpm exec wrangler secret put GARMIN_PASSWORD
 pnpm build
-pnpm deploy
+pnpm run deploy
 ```
 
-BETTER_AUTH_SECRET、BOOTSTRAP_SECRET 分别使用至少 32 个高熵随机字符；PROVIDER_ENCRYPTION_KEY 使用独立 32 字节 base64 值。只填写所选模式的 Garmin 凭据，两种模式不能共存。密码按原始字符串提供；不要写入普通 vars、Git、命令参数或日志。生产部署脚本拒绝全零 D1 UUID、localhost/占位 APP_URL 和错误模式/区域。
+Cloudflare 部署脚本安全随机生成缺失的 `BETTER_AUTH_SECRET` 和独立 32 字节 base64 `PROVIDER_ENCRYPTION_KEY`，持久保存为 Worker Secret；重建和重复部署保留已有值，不自动轮换。请勿删除，provider 加密密钥应单独备份。模板通过 `.dev.vars.example` 提示 Garmin API Key 或账号密码，只填写 `GARMIN_AUTH_MODE` 所选模式的一组，两种模式不能共存。首次 Owner 创建无需 `BOOTSTRAP_SECRET`。密码按原始字符串提供；不要写入普通 vars、Git、命令参数或日志。生产部署脚本拒绝全零 D1 UUID、localhost/占位 APP_URL 和错误模式/区域。
 
-部署脚本先对 **DB binding** 应用迁移，再发布单 Worker。根配置包含 Static Assets、D1、R2、三类 DO、SyncWorkflow 和 Cron。Workflows 的实际创建及官方自动资源配置兼容性仍需在独立账户验证。
+本地 CLI 的 `pnpm run deploy` 同样强制准备资源与内部 Secret，必须提供上述 Cloudflare 账户 ID 与 API Token；如只需提前准备，可执行 `pnpm deploy:prepare`。部署脚本在配置校验通过后对 **DB binding** 应用迁移，再发布单 Worker。根配置包含 Static Assets、D1、R2、三类 DO、SyncWorkflow 和 Cron。Workflows 的实际创建及官方自动资源配置兼容性仍需在独立账户验证。
 
-打开 APP_URL，以一次性密钥创建唯一 Owner。确认登录/退出可用后执行 `wrangler secret delete BOOTSTRAP_SECRET`。D1 初始化标志不可重新开启；恢复使用维护脚本。
+部署后立即打开 APP_URL，以名字、邮箱和至少 12 个字符的密码创建唯一 Owner，无需初始化密钥。**任何能访问未初始化实例的人都可能抢先成为 Owner**；初始化前不要分享地址，必要时在全部入口（包括 workers.dev 和自定义域名）限制访问。Origin 校验和限流不证明部署者身份。创建后登录，在设置页连接 Garmin、完成 MFA（如有）并同步。D1 永久初始化标志和单用户约束禁止再次创建；恢复使用维护脚本。
 
 ## 同步与存储
 
 设置页连接 Garmin，按提示完成 MFA；先同步最近 7 天，再按设置补录历史。健康默认 90 天（可选 1–365），活动默认 365 天（可选 1–7300）；更长健康历史可分窗实施，单次健康/训练查询及补录窗口最多 366 天。手动活动补录支持更长范围，分页预算最多 200000 条。不要把 API/设备不支持的指标当作真实零。
 
-Cron UTC 时间表：活动/FIT 每 30 分钟，健康每小时第 5 分钟，训练每日 02:15，设备/归档维护每周日 02:30。Owner 时区用于日期口径和 Web 展示。可关闭自动同步及 FIT 归档；大文件默认 16 MiB，上限 32 MiB，超限保留错误状态。受设备与账号能力影响，私有接口可能失败；不要尝试规避验证码或风控。
+Cron UTC 时间表：活动/FIT 每 30 分钟，健康每小时第 5 分钟，训练每日 02:15，设备/归档维护每周日 02:30。日期口径和 Web 展示固定使用内置时区 `Asia/Shanghai`，不改变上述 UTC Cron 时间表。可关闭自动同步及 FIT 归档；大文件默认 16 MiB，上限 32 MiB，超限保留错误状态。受设备与账号能力影响，私有接口可能失败；不要尝试规避验证码或风控。
 
 文件以 SHA-256 不可变键保存。索引失败可重试或由周度扫描重建；缺失对象标记错误。历史数据和旧对象默认保留，不因上游暂时缺失自动删除。管理者自行决定外部保留/清理策略。
 

@@ -1,7 +1,10 @@
-BETTER_AUTH_SECRET=
-BOOTSTRAP_SECRET=
-PROVIDER_ENCRYPTION_KEY=
-# Required in M2, according to GARMIN_AUTH_MODE; leave empty for M1.
+# Cloudflare deployment asks only for Garmin credentials. Internal application keys
+# are generated once and persisted as Worker Secrets by pnpm run deploy.
+# Local development: run pnpm secrets:local to generate internal keys.
+# Fill ONLY the group selected by GARMIN_AUTH_MODE in wrangler.jsonc / deploy vars:
+# credentials (default): GARMIN_EMAIL + GARMIN_PASSWORD; leave API key empty.
+# personal_api: GARMIN_PERSONAL_API_KEY; leave email/password empty.
+# GARMIN_REGION is CN (default) or GLOBAL. Never place credentials in ordinary vars.
 GARMIN_PERSONAL_API_KEY=
 GARMIN_EMAIL=
 GARMIN_PASSWORD=

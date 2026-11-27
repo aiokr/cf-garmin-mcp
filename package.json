@@ -15,11 +15,12 @@
     "build": "pnpm build:web && wrangler deploy --dry-run --outdir dist/worker",
     "typecheck": "vue-tsc --noEmit -p apps/web/tsconfig.json && tsc --noEmit -p apps/worker/tsconfig.json && tsc --noEmit -p tests/tsconfig.json",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "node --test --test-isolation=none scripts/prepare-deploy.test.mjs && vitest run",
     "check": "pnpm lint && pnpm typecheck && pnpm build && pnpm test",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
-    "deploy": "node scripts/validate-deploy.mjs && pnpm db:migrate:remote && wrangler deploy",
+    "deploy": "node scripts/prepare-deploy.mjs --provision && node scripts/validate-deploy.mjs && pnpm db:migrate:remote && wrangler deploy",
+    "deploy:prepare": "node scripts/prepare-deploy.mjs --provision",
     "secrets:local": "node scripts/local-secrets.mjs",
     "auth:schema": "node scripts/generate-auth-schema.mjs",
     "owner:recover": "node scripts/recover-owner.mjs",
@@ -30,23 +31,32 @@
   },
   "cloudflare": {
     "bindings": {
-      "BETTER_AUTH_SECRET": {
-        "description": "Independent application signing secret, at least 32 random characters."
+      "DB": {
+        "description": "自动创建或选择此实例专用的 D1 数据库。部署时自动写入 UUID，并在发布前执行建表迁移。请勿与其他实例共用。"
       },
-      "BOOTSTRAP_SECRET": {
-        "description": "One-time Owner initialization secret, at least 32 random characters. Remove after setup."
+      "FIT_BUCKET": {
+        "description": "自动创建或选择此实例专用的私有 R2 Bucket，保存 FIT 原始文件。需先在账户启用 R2；请勿开启公共访问。"
       },
-      "PROVIDER_ENCRYPTION_KEY": {
-        "description": "Independent 32-byte base64 Garmin token encryption key; keep a backup."
+      "APP_URL": {
+        "description": "默认值 http://localhost:8787 可以不修改：部署脚本会自动生成正式的 HTTPS workers.dev 地址。仅使用自定义域名时才填写实际 HTTPS origin（无子路径）。"
+      },
+      "PROVIDER_KEY_VERSION": {
+        "description": "默认 1 即可，无需修改。这是 Garmin token 加密密钥版本号，仅按维护文档主动轮换加密密钥时才递增，不是 Garmin API 版本。"
+      },
+      "GARMIN_AUTH_MODE": {
+        "description": "credentials 或 personal_api，只填写所选模式对应的一组 Garmin Secret。"
+      },
+      "GARMIN_REGION": {
+        "description": "Garmin 账户区域：CN（中国区）或 GLOBAL（国际区）。"
       },
       "GARMIN_PERSONAL_API_KEY": {
-        "description": "Only required for personal_api mode; never sent to the browser."
+        "description": "仅 personal_api 模式填写；credentials 模式留空。使用 Garmin Personal API Key，不是本项目的 MCP PAT。"
       },
       "GARMIN_EMAIL": {
-        "description": "Only required for credentials mode."
+        "description": "仅 credentials 模式填写 Garmin 邮箱，同时填写 GARMIN_PASSWORD；personal_api 模式留空。"
       },
       "GARMIN_PASSWORD": {
-        "description": "Only required for credentials mode; raw string stored as a Worker Secret."
+        "description": "仅 credentials 模式填写 Garmin 原始密码（不编码），与 GARMIN_EMAIL 配对；personal_api 模式留空。"
       }
     }
   },
