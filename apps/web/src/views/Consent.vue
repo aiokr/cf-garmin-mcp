@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { Button } from "base-ui-vue";
 import { api } from "../api";
+import { useToasts } from "../stores/toasts";
 import { authClient } from "../api/auth";
 import Icon from "../components/Icon.vue";
 const request = ref<{
@@ -12,6 +13,7 @@ const request = ref<{
   oauthQuery: string;
 } | null>(null);
 const selected = ref<string[]>([]);
+const toasts = useToasts();
 const error = ref("");
 const busy = ref(false);
 const labels: Record<string, string> = {
@@ -47,7 +49,6 @@ onMounted(async () => {
 async function consent(accept: boolean) {
   if (!request.value) return;
   busy.value = true;
-  error.value = "";
   try {
     const result = await authClient.oauth2.consent({
       accept,
@@ -56,7 +57,7 @@ async function consent(accept: boolean) {
     });
     if (result.error) throw new Error(result.error.message);
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "授权失败";
+    toasts.add(e instanceof Error ? e.message : "授权失败", "error");
   } finally {
     busy.value = false;
   }

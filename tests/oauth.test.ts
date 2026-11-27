@@ -178,12 +178,37 @@ describe.sequential("OAuth PKCE, independent clients and stateless MCP", () => {
     expect(await apps.text()).toContain("last_accessed_at");
   });
   it("revokes A access and refresh immediately while B and the owner session continue", async () => {
+    const patResponse = await request("/api/v1/mcp/pats", {
+      method: "POST",
+      headers: ownerHeaders(),
+      body: JSON.stringify({
+        name: "OAuth coexistence",
+        scopes: ["profile:read"],
+        expiresInDays: 30,
+      }),
+    });
+    expect(patResponse.status).toBe(201);
+    const { data: pat } = await patResponse.json<{
+      data: { id: string; token: string };
+    }>();
     const revoked = await request(
       `/api/v1/connected-apps/${clientA.clientId}/revoke`,
       { method: "POST", headers: ownerHeaders(), body: "{}" },
     );
     expect(revoked.status, await revoked.clone().text()).toBe(200);
     expect((await mcp(clientA.access_token, "tools/list")).status).toBe(401);
+    expect((await mcp(clientB.access_token, "tools/list")).status).toBe(200);
+    expect((await mcp(pat.token, "tools/list")).status).toBe(200);
+    expect(
+      (
+        await request(`/api/v1/mcp/pats/${pat.id}/revoke`, {
+          method: "POST",
+          headers: ownerHeaders(),
+          body: "{}",
+        })
+      ).status,
+    ).toBe(200);
+    expect((await mcp(pat.token, "tools/list")).status).toBe(401);
     expect((await mcp(clientB.access_token, "tools/list")).status).toBe(200);
     expect(
       (await request("/api/v1/me", { headers: { Cookie: cookie } })).status,

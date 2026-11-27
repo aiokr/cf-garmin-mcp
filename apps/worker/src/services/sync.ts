@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { pruneSyncHistory } from "./sync-history";
 import { readProvider, type Connection } from "../durable-objects/garmin-auth";
 import {
   mapActivity,
@@ -27,6 +28,22 @@ export function daysBetween(start: string, end: string): string[] {
   }
   return days;
 }
+export function activityWindows(start: string, end: string) {
+  const windows: { start: string; end: string }[] = [];
+  for (
+    let time = Date.parse(start);
+    time <= Date.parse(end);
+    time += 30 * 86400_000
+  ) {
+    windows.push({
+      start: new Date(time).toISOString().slice(0, 10),
+      end: new Date(Math.min(time + 29 * 86400_000, Date.parse(end)))
+        .toISOString()
+        .slice(0, 10),
+    });
+  }
+  return windows;
+}
 export async function startSync(
   env: Env,
   connection: Connection,
@@ -36,6 +53,8 @@ export async function startSync(
   mode = "incremental",
   initial = false,
 ) {
+  if (stream === "training" && connection.auth_type === "personal_api")
+    throw new ServiceError("PROVIDER_OPERATION_UNSUPPORTED", 422);
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   // Partial unique index makes the stream lock authoritative across Cron/Web calls.
@@ -76,6 +95,7 @@ export async function startSync(
       .run();
     throw error;
   }
+  await pruneSyncHistory(env);
   return { id, existing: false };
 }
 
@@ -199,10 +219,13 @@ async function optionalData(
   date: string,
 ): Promise<{ data: unknown; status: string }> {
   try {
-    return {
-      data: await readProvider(env, row, operation, { date }),
-      status: "available",
-    };
+    const data = await readProvider(env, row, operation, { date });
+    const empty =
+      data == null ||
+      (Array.isArray(data)
+        ? data.length === 0
+        : typeof data === "object" && Object.keys(data).length === 0);
+    return { data, status: empty ? "unavailable" : "available" };
   } catch (error) {
     if (
       error instanceof ServiceError &&
@@ -275,6 +298,9 @@ async function saveDaily(
     .run();
   return {
     count: 1,
+    unavailableSources: Object.entries(sources)
+      .filter(([, status]) => status !== "available")
+      .map(([source, status]) => `${source}:${status}`),
     unavailable: Object.values(sources).some(
       (status) => status !== "available",
     ),

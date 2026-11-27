@@ -3,11 +3,13 @@ import { computed, ref } from "vue";
 import { Button } from "base-ui-vue";
 import { useRouter } from "vue-router";
 import { useSession } from "../stores/session";
+import { useToasts } from "../stores/toasts";
 import { api } from "../api";
 import Icon from "../components/Icon.vue";
 import { authClient } from "../api/auth";
 
 const session = useSession();
+const toasts = useToasts();
 const router = useRouter();
 const setup = computed(() => session.instance && !session.instance.initialized);
 const name = ref("");
@@ -15,12 +17,8 @@ const email = ref("");
 const password = ref("");
 const secret = ref("");
 const busy = ref(false);
-const error = ref("");
-const success = ref("");
 async function submit() {
   busy.value = true;
-  error.value = "";
-  success.value = "";
   try {
     if (!session.ready) {
       await session.refresh();
@@ -39,7 +37,7 @@ async function submit() {
       secret.value = "";
       password.value = "";
       await session.refresh();
-      success.value = "账户已创建，请使用刚才的邮箱和密码登录。";
+      toasts.add("账户已创建，请使用刚才的邮箱和密码登录。");
     } else {
       const result = await authClient.signIn.email({
         email: email.value,
@@ -51,7 +49,10 @@ async function submit() {
       if (!window.location.search.includes("sig=")) await router.push("/");
     }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "操作失败，请稍后重试。";
+    toasts.add(
+      e instanceof Error ? e.message : "操作失败，请稍后重试。",
+      "error",
+    );
   } finally {
     busy.value = false;
     secret.value = "";
@@ -133,15 +134,8 @@ async function submit() {
                 minlength="32"
                 maxlength="256" /><small></small></label
           ></template>
-          <p
-            v-if="error || session.error"
-            class="form-message error-text"
-            role="alert"
-          >
-            {{ error || session.error }}
-          </p>
-          <p v-if="success" class="form-message success-text" role="status">
-            {{ success }}
+          <p v-if="session.error" class="form-message error-text" role="alert">
+            {{ session.error }}
           </p>
           <p
             v-if="setup && !session.instance?.bootstrapAvailable"

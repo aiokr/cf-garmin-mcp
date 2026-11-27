@@ -4,8 +4,11 @@ import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
 import type { Env } from "../env";
 import type { Owner } from "../../../../packages/shared/src";
 import { ServiceError } from "../lib/errors";
+import { pruneSyncHistory } from "../services/sync-history";
 import { createAuth } from "../auth/config";
 import { stringArray } from "../auth/mcp";
+import { createPat } from "../auth/pat";
+import { createPatSchema } from "../../../../packages/shared/src";
 import { providerStatus } from "../providers/garmin/config";
 import { garminCommand } from "../durable-objects/garmin-auth";
 import { seal } from "../lib/crypto";
@@ -160,16 +163,13 @@ for (const [path, table] of [
 }
 apiRoutes.get("/connections", async (c) => {
   const rows = await c.env.DB.prepare(
-    "SELECT id,region,auth_type,display_name,status,last_verified_at,last_synced_at,last_error_code FROM provider_connections WHERE user_id=? ORDER BY last_verified_at DESC",
+    "SELECT id,region,auth_type,display_name,status,last_verified_at,last_synced_at,last_error_code FROM provider_connections WHERE user_id=? AND NOT (external_user_id LIKE 'pending:%' AND status IN ('error','revoked')) ORDER BY last_verified_at DESC",
   )
     .bind(c.get("owner").id)
     .all<{ display_name: string | null }>();
-  const connections = rows.results.map((row) => ({
-    ...row,
-    display_name: row.display_name
-      ? row.display_name.slice(0, 2) + "…" + row.display_name.slice(-2)
-      : null,
-  }));
+  // Failed attempts without a verified identity are not Garmin accounts.
+  // This owner-only endpoint returns full names; presentation truncation is CSS-only.
+  const connections = rows.results;
   return c.json({
     data: { provider: providerStatus(c.env), connections },
     requestId: c.get("requestId"),
@@ -313,20 +313,60 @@ apiRoutes.post("/sync", async (c) => {
   const runs = [];
   for (const stream of value.stream === "all"
     ? ["activities", "health", "training", "files", "devices"]
-    : [value.stream])
+    : [value.stream]) {
+    if (
+      stream === "training" &&
+      connection.auth_type === "personal_api" &&
+      value.stream === "all"
+    )
+      continue;
     runs.push(
       await startSync(c.env, connection, stream, start, end, value.mode),
     );
+  }
   return c.json({ data: { runs }, requestId: c.get("requestId") }, 202);
 });
 apiRoutes.get("/sync/runs", async (c) => {
+  await pruneSyncHistory(c.env);
   const rows = await c.env.DB.prepare(
-    "SELECT r.* FROM sync_runs r JOIN provider_connections c ON c.id=r.connection_id WHERE c.user_id=? ORDER BY r.started_at DESC LIMIT 50",
+    "SELECT r.* FROM sync_runs r JOIN provider_connections c ON c.id=r.connection_id WHERE c.user_id=? ORDER BY r.started_at DESC,r.id DESC LIMIT 96",
   )
     .bind(c.get("owner").id)
     .all();
+  const items = await Promise.all(
+    rows.results.map(async (run) => {
+      if (
+        run.status !== "partial" ||
+        !["health", "training"].includes(String(run.stream))
+      )
+        return run;
+      const table =
+        run.stream === "health" ? "daily_health" : "training_metrics";
+      // Current per-source availability for this owner-authorized run's date window.
+      const daily = await c.env.DB.prepare(
+        `SELECT availability FROM ${table} WHERE connection_id=? AND local_date BETWEEN ? AND ?`,
+      )
+        .bind(run.connection_id, run.start_date, run.end_date)
+        .all<{ availability: string }>();
+      const missing = new Set<string>();
+      for (const day of daily.results) {
+        try {
+          const sources = JSON.parse(day.availability) as Record<
+            string,
+            { status: string }
+          >;
+          for (const [source, value] of Object.entries(sources))
+            if (value.status !== "available")
+              missing.add(source + ":" + value.status);
+        } catch {
+          /* Legacy availability may be absent. */
+        }
+      }
+      return { ...run, unavailable_sources: [...missing] };
+    }),
+  );
   return c.json({
-    data: { items: rows.results },
+    data: { items },
     requestId: c.get("requestId"),
   });
 });
@@ -376,6 +416,46 @@ apiRoutes.put("/settings", async (c) => {
     )
     .run();
   return c.json({ data: { saved: true }, requestId: c.get("requestId") });
+});
+apiRoutes.get("/mcp/pats", async (c) => {
+  const rows = await c.env.DB.prepare(
+    `SELECT id,name,hint,scopes,
+    created_at AS createdAt,expires_at AS expiresAt,last_used_at AS lastUsedAt,
+    revoked_at AS revokedAt FROM mcp_personal_access_tokens
+    WHERE user_id=? ORDER BY created_at DESC`,
+  )
+    .bind(c.get("owner").id)
+    .all();
+  return c.json({
+    data: {
+      items: rows.results.map((row) => ({
+        ...row,
+        scopes: stringArray(row.scopes as string),
+      })),
+    },
+    requestId: c.get("requestId"),
+  });
+});
+apiRoutes.post("/mcp/pats", async (c) => {
+  const input = parsed(createPatSchema, await body(c.req));
+  return c.json(
+    {
+      data: await createPat(c.env, c.get("owner").id, input),
+      requestId: c.get("requestId"),
+    },
+    201,
+  );
+});
+apiRoutes.post("/mcp/pats/:id/revoke", async (c) => {
+  const id = parsed(uuid, c.req.param("id"));
+  const result = await c.env.DB.prepare(
+    `UPDATE mcp_personal_access_tokens
+    SET revoked_at=COALESCE(revoked_at,?) WHERE id=? AND user_id=?`,
+  )
+    .bind(Date.now(), id, c.get("owner").id)
+    .run();
+  if (!result.meta.changes) throw new ServiceError("NOT_FOUND", 404);
+  return c.json({ data: { revoked: true }, requestId: c.get("requestId") });
 });
 apiRoutes.get("/connected-apps", async (c) => {
   const rows = await c.env.DB.prepare(
@@ -442,19 +522,29 @@ async function queueInitialSync(env: Env, userId: string, id: string) {
     .toISOString()
     .slice(0, 10);
   for (const stream of ["activities", "health", "training", "devices"]) {
+    if (stream === "training" && connection.auth_type === "personal_api")
+      continue;
     const cursor = await env.DB.prepare(
       "SELECT checkpoint FROM sync_cursors WHERE connection_id=? AND stream=?",
     )
       .bind(id, stream)
       .first();
-    await startSync(
-      env,
-      connection,
-      stream,
-      start,
-      end,
-      "incremental",
-      !cursor,
-    );
+    try {
+      await startSync(
+        env,
+        connection,
+        stream,
+        start,
+        end,
+        "incremental",
+        !cursor,
+      );
+    } catch {
+      // Keep other streams independent; startSync retains a failed diagnostic row
+      // when Workflow creation fails, so the owner can retry the exact window.
+      console.error(
+        JSON.stringify({ event: "initial_sync_start_failed", stream }),
+      );
+    }
   }
 }

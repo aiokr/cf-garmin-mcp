@@ -62,7 +62,9 @@ const nonNegative = (value: unknown): number | null => {
 
 export function mapHealth(summary: unknown, sleep: unknown, hrv: unknown) {
   const daily = object(summary);
-  const sleeping = object(nested(sleep, "dailySleepDTO"));
+  const sleeping = Array.isArray(sleep)
+    ? firstObject(sleep)
+    : object(nested(sleep, "dailySleepDTO"));
   const hr = object(nested(hrv, "hrvSummary"));
   return {
     steps: nonNegative(daily.totalSteps),

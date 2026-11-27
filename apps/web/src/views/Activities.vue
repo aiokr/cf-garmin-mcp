@@ -2,6 +2,7 @@
 import { onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useConnections } from "../stores/connections";
+import { useToasts } from "../stores/toasts";
 import { Button } from "base-ui-vue";
 import { api } from "../api";
 import type { ActivitySummary } from "../../../../packages/shared/src";
@@ -9,6 +10,7 @@ import ActivityTable from "../components/ActivityTable.vue";
 import EmptyState from "../components/EmptyState.vue";
 import Icon from "../components/Icon.vue";
 const connections = useConnections();
+const toasts = useToasts();
 const route = useRoute();
 const connectionId = ref(
   typeof route.query.connectionId === "string" ? route.query.connectionId : "",
@@ -16,14 +18,12 @@ const connectionId = ref(
 const items = ref<ActivitySummary[]>([]);
 const cursor = ref<string | null>(null);
 const loading = ref(false);
-const error = ref("");
 const search = ref("");
 const sport = ref("");
 const start = ref("");
 const end = ref("");
 async function load(more = false) {
   loading.value = true;
-  error.value = "";
   try {
     const query = new URLSearchParams({ limit: "25" });
     if (connectionId.value) query.set("connectionId", connectionId.value);
@@ -39,7 +39,7 @@ async function load(more = false) {
     items.value = more ? [...items.value, ...data.items] : data.items;
     cursor.value = data.nextCursor;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "加载失败";
+    toasts.add(e instanceof Error ? e.message : "加载失败", "error");
   } finally {
     loading.value = false;
   }
@@ -99,7 +99,6 @@ onMounted(() => load());
       ><Icon name="search" :size="16" />筛选</Button
     >
   </form>
-  <p v-if="error" role="alert" class="error-text">{{ error }}</p>
   <section class="panel">
     <p v-if="loading && !items.length" class="chart-empty" role="status">
       读取中…

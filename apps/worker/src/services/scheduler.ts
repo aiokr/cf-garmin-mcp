@@ -2,6 +2,7 @@ import type { Env } from "../env";
 import type { Connection } from "../durable-objects/garmin-auth";
 import { dateInZone, startSync } from "./sync";
 import { repairArchives } from "./storage";
+import { pruneSyncHistory } from "./sync-history";
 
 export async function reconcileRuns(env: Env) {
   const rows = await env.DB.prepare(
@@ -27,6 +28,7 @@ export async function reconcileRuns(env: Env) {
 }
 export async function runScheduled(env: Env, cron: string) {
   await reconcileRuns(env);
+  await pruneSyncHistory(env);
   if (cron === "30 2 * * 0") await repairArchives(env);
   const rows = await env.DB.prepare(
     "SELECT c.* FROM provider_connections c LEFT JOIN owner_settings s ON s.user_id=c.user_id WHERE c.status='connected' AND COALESCE(s.auto_sync,1)=1",
@@ -42,6 +44,8 @@ export async function runScheduled(env: Env, cron: string) {
   for (const connection of rows.results) {
     const end = dateInZone(env.APP_TIMEZONE);
     for (const stream of streams) {
+      if (stream === "training" && connection.auth_type === "personal_api")
+        continue;
       const cursor = await env.DB.prepare(
         "SELECT checkpoint FROM sync_cursors WHERE connection_id=? AND stream=?",
       )

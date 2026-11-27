@@ -1,16 +1,10 @@
 import type { Env } from "../env";
 import { sha256 } from "../lib/crypto";
 import { ServiceError } from "../lib/errors";
+import { MCP_SCOPES } from "../../../../packages/shared/src";
+import { verifyPat } from "./pat";
 
-export const SCOPES = [
-  "profile:read",
-  "activities:read",
-  "health:read",
-  "sleep:read",
-  "training:read",
-  "location:read",
-  "files:read",
-] as const;
+export const SCOPES = MCP_SCOPES;
 export const stringArray = (value: string | null): string[] => {
   try {
     const parsed: unknown = JSON.parse(value || "[]");
@@ -36,6 +30,8 @@ export async function verifyMcpToken(
   const authorization = request.headers.get("Authorization") || "";
   if (!/^Bearer [\x21-\x7e]{20,2048}$/.test(authorization))
     throw new ServiceError("INVALID_TOKEN", 401);
+  const token = authorization.slice(7);
+  if (token.startsWith("gmp_pat_")) return verifyPat(env, token);
   // The one authorization server emits opaque tokens and stores this hash.
   // Every request reads authoritative state: expiry, session, owner, client,
   // consent, scope and resource, so revocation has no JWT/cache delay.

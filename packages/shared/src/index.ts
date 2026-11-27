@@ -1,5 +1,36 @@
 import { z } from "zod";
 
+export const MCP_SCOPES = [
+  "profile:read",
+  "activities:read",
+  "health:read",
+  "sleep:read",
+  "training:read",
+  "location:read",
+  "files:read",
+] as const;
+export const createPatSchema = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    scopes: z
+      .array(z.enum(MCP_SCOPES))
+      .min(1)
+      .max(MCP_SCOPES.length)
+      .refine((scopes) => new Set(scopes).size === scopes.length),
+    expiresInDays: z.union([z.literal(30), z.literal(90), z.literal(365)]),
+  })
+  .strict();
+export type PersonalAccessToken = {
+  id: string;
+  name: string;
+  hint: string;
+  scopes: string[];
+  createdAt: number;
+  expiresAt: number;
+  lastUsedAt: number | null;
+  revokedAt: number | null;
+};
+
 export const bootstrapSchema = z
   .object({
     name: z.string().trim().min(1).max(80),

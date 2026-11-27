@@ -70,6 +70,14 @@ export async function upstream(
         ? Number(retryValue)
         : Math.ceil((Date.parse(retryValue) - Date.now()) / 1000)
       : 60;
+    // Log only the fixed API path and status, never query strings, headers or bodies.
+    console.warn(
+      JSON.stringify({
+        event: "garmin_upstream_rejected",
+        path: new URL(url).pathname,
+        status,
+      }),
+    );
     await response.body?.cancel();
     if (status >= 500 && attempt < attempts) {
       await delay(250 * 2 ** attempt + Math.random() * 100);

@@ -40,11 +40,21 @@ export async function providerRequest(
   const date = encodeURIComponent(query.date || "");
   const id = encodeURIComponent(query.id || "");
   const paths: Record<ProviderOperation, string> = {
-    profile: "/userprofile-service/socialProfile",
+    // Personal API exposes account settings rather than the mobile social profile.
+    profile:
+      env.GARMIN_AUTH_MODE === "personal_api"
+        ? "/userprofile-service/userprofile/settings"
+        : "/userprofile-service/socialProfile",
     activities: "/activitylist-service/activities/search/activities",
     activity: `/activity-service/activity/${id}`,
-    health: `/usersummary-service/usersummary/daily/${user}`,
-    sleep: `/wellness-service/wellness/dailySleepData/${user}`,
+    health:
+      env.GARMIN_AUTH_MODE === "personal_api"
+        ? "/usersummary-service/usersummary/daily"
+        : `/usersummary-service/usersummary/daily/${user}`,
+    sleep:
+      env.GARMIN_AUTH_MODE === "personal_api"
+        ? "/sleep-service/sleep/dailySleepSummariesByDate"
+        : `/wellness-service/wellness/dailySleepData/${user}`,
     hrv: `/hrv-service/hrv/${date}`,
     training: `/metrics-service/metrics/trainingstatus/aggregated/${date}`,
     vo2max: `/metrics-service/metrics/maxmet/daily/${date}/${date}`,
@@ -65,13 +75,16 @@ export async function providerRequest(
   }
   if (operation === "health")
     url.searchParams.set("calendarDate", query.date || "");
-  if (operation === "sleep") {
+  if (operation === "sleep" && env.GARMIN_AUTH_MODE === "personal_api") {
+    url.searchParams.set("startDate", query.date || "");
+    url.searchParams.set("endDate", query.date || "");
+  } else if (operation === "sleep") {
     url.searchParams.set("date", query.date || "");
     url.searchParams.set("nonSleepBufferMinutes", "60");
   }
   const response = await upstream(url, {
     headers: {
-      ...NATIVE_HEADERS,
+      ...(env.GARMIN_AUTH_MODE === "personal_api" ? {} : NATIVE_HEADERS),
       Authorization: `Bearer ${tokens.accessToken}`,
       Accept: operation === "file" ? "*/*" : "application/json",
     },
@@ -93,11 +106,22 @@ export async function identity(
     string,
     unknown
   >;
-  const id = profile.profileId ?? profile.id ?? profile.userProfilePk;
+  // Settings may omit the numeric profile ID. Keep a deterministic account
+  // identity for reauthentication checks; locale alone cannot identify an account.
+  const id =
+    profile.profileId ??
+    profile.id ??
+    profile.userProfilePk ??
+    (env.GARMIN_AUTH_MODE === "personal_api" &&
+    typeof profile.displayName === "string" &&
+    profile.displayName.trim()
+      ? `personal:${profile.displayName}`
+      : undefined);
   if (
     (typeof id !== "string" && typeof id !== "number") ||
     !String(id) ||
-    typeof profile.displayName !== "string"
+    typeof profile.displayName !== "string" ||
+    !profile.displayName.trim()
   )
     throw new ServiceError("INVALID_PROVIDER_IDENTITY", 502);
   return {

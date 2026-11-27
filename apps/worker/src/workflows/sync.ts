@@ -4,10 +4,12 @@ import {
   type WorkflowStep,
 } from "cloudflare:workers";
 import type { Env } from "../env";
+import { pruneSyncHistory } from "../services/sync-history";
 import type { Connection } from "../durable-objects/garmin-auth";
 import {
   archiveActivity,
   daysBetween,
+  activityWindows,
   syncActivityPage,
   syncHealthDay,
   syncTrainingDay,
@@ -68,30 +70,34 @@ export class SyncWorkflow extends WorkflowEntrypoint<Env, { runId: string }> {
           }>(),
       );
       if (run.stream === "activities") {
-        let completed = false;
-        for (let offset = 0; offset < 200_000; offset += 50) {
-          const page = await this.perform(
-            step,
-            `activities-${offset}`,
-            row,
-            run,
-            () =>
-              syncActivityPage(
-                this.env,
-                row,
-                run.start_date,
-                run.end_date,
-                offset,
-                settings?.archive_fit !== 0,
-              ),
-          );
-          count += page.count;
-          if (!page.hasMore) {
-            completed = true;
-            break;
+        // Bound expensive upstream searches to 30-day windows. Each page is a
+        // durable Workflow step, so retries resume without losing earlier windows.
+        for (const window of activityWindows(run.start_date, run.end_date)) {
+          let completed = false;
+          for (let offset = 0; offset < 200_000; offset += 50) {
+            const page = await this.perform(
+              step,
+              `activities-${window.start}-${offset}`,
+              row,
+              run,
+              () =>
+                syncActivityPage(
+                  this.env,
+                  row,
+                  window.start,
+                  window.end,
+                  offset,
+                  settings?.archive_fit !== 0,
+                ),
+            );
+            count += page.count;
+            if (!page.hasMore) {
+              completed = true;
+              break;
+            }
           }
+          if (!completed) throw new ServiceError("SYNC_PAGINATION_LIMIT", 413);
         }
-        if (!completed) throw new ServiceError("SYNC_PAGINATION_LIMIT", 413);
       } else if (run.stream === "files") {
         const files = await step.do("pending-files", () =>
           this.env.DB.prepare(
@@ -155,6 +161,15 @@ export class SyncWorkflow extends WorkflowEntrypoint<Env, { runId: string }> {
           );
           count += result.count;
           partial ||= result.unavailable;
+          if (result.unavailable)
+            console.warn(
+              JSON.stringify({
+                event: "sync_partial_sources",
+                stream: run.stream,
+                date,
+                sources: result.unavailableSources,
+              }),
+            );
         }
       }
       await step.do("commit-checkpoint", async () => {
@@ -217,12 +232,23 @@ export class SyncWorkflow extends WorkflowEntrypoint<Env, { runId: string }> {
           .toISOString()
           .slice(0, 10);
         if (start <= end)
-          await step.do("queue-history", () =>
-            startSync(this.env, row, run.stream, start, end, "backfill").catch(
-              () => ({ queued: false }),
-            ),
-          );
+          await step.do("queue-history", async () => {
+            const queued = await startSync(
+              this.env,
+              row,
+              run.stream,
+              start,
+              end,
+              "backfill",
+            );
+            // A concurrent incremental run must not be mistaken for the requested
+            // history job. Retry this step instead of silently losing the window.
+            if (queued.existing)
+              throw new ServiceError("SYNC_STREAM_BUSY", 409);
+            return queued;
+          });
       }
+      await step.do("prune-history", () => pruneSyncHistory(this.env));
       return { status: partial ? "partial" : "succeeded", count };
     } catch (error) {
       await step.do("mark-failed", async () => {
@@ -243,6 +269,7 @@ export class SyncWorkflow extends WorkflowEntrypoint<Env, { runId: string }> {
           .run();
         return true;
       });
+      await step.do("prune-failed-history", () => pruneSyncHistory(this.env));
       return { status: "failed", code: safeCode(error), count };
     }
   }

@@ -37,6 +37,11 @@ export const router = createRouter({
       meta: { title: "应用授权" },
     },
     {
+      path: "/mcp-service",
+      component: () => import("../views/McpService.vue"),
+      meta: { title: "MCP 服务" },
+    },
+    {
       path: "/settings",
       component: () => import("../views/Settings.vue"),
       meta: { title: "设置", eyebrow: "MAKE IT YOURS" },

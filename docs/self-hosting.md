@@ -43,11 +43,22 @@ Cron UTC 时间表：活动/FIT 每 30 分钟，健康每小时第 5 分钟，�
 
 文件以 SHA-256 不可变键保存。索引失败可重试或由周度扫描重建；缺失对象标记错误。历史数据和旧对象默认保留，不因上游暂时缺失自动删除。管理者自行决定外部保留/清理策略。
 
+### Personal API 联调与部分数据诊断
+
+- 运动历史按最多 30 天日期窗口分页，避免一次查询近一年时上游返回 500。最近 7 天成功不代表历史补录完成；在设置页选择“运动记录”和完整起止日期重试历史任务。已验证 2025-11-28 至 2026-11-20 的 12 个窗口全部返回 200，共 65 条运动（2026-11-27 联调，具体数量仅对应当时账户）。
+- Personal API 日汇总使用 `/usersummary-service/usersummary/daily?calendarDate=...`，不拼 displayName；睡眠使用 `/sleep-service/sleep/dailySleepSummariesByDate?startDate=...&endDate=...`。不能套用移动端的用户名路径。
+- `PARTIAL_DATA` 表示健康/训练某来源不可用或文件仍未就绪，不是活动只同步两天。同步诊断显示当前具体缺失来源；404 不能证明账户没有该指标，也不能当作成功。用户提供的参考项目 `Likenttt/garmin-connect-plugin-for-dsh` 的 `src/personal-capabilities.ts` 与 `src/personal-client.ts` 明确将训练状态、VO2max、训练准备度排除在 Personal API 能力之外（对应方法直接 unsupported）。因此 Personal API 模式不再自动排队训练任务，手动训练同步返回 `PROVIDER_OPERATION_UNSUPPORTED`，而不是反复请求移动端路径产生 404/PARTIAL_DATA。不要跨区域、改用未授权认证或伪造指标来掩盖缺失。
+- 200 响应中的 `null`、空对象或空数组会标为不可用，并保留已有数值。任务历史每页 10 条，自动保留最新 96 条；活动中的任务暂不清理，已同步数据与 FIT 不随任务历史删除。
+
 ## MCP
 
 客户端连接 APP_URL + `/mcp`。外部客户端通过 Bearer token 访问，不能读取 Garmin token。HTTP 应用写入仍检查 Origin；OAuth token/register/introspect/revoke 协议端点不依赖 Cookie。浏览器直接调用 MCP 时，可在 `MCP_ALLOWED_ORIGINS` 中配置精确的额外 Origin（逗号分隔），默认只允许应用自身 Origin；无 Origin 的服务端客户端不受该列表影响。
 
 OAuth access token 15 分钟，refresh token 最长 30 天，仍受原授权会话、consent 和撤销状态约束。退出或过期的原会话会使相关授权不可用，客户端需重新登录授权。动态注册名称不表示真实身份；核对 client ID、回调地址和 scope。
+
+也支持 PAT Key：登录 Web → MCP 服务 → PAT Key，填写名称、选择只读权限与有效期（30 / 90 / 365 天）后创建。完整密钥只在创建后显示一次，数据库仅保存 SHA-256 哈希。客户端仍连接同一个 `/mcp` 地址，将密钥填入 PAT_key / Bearer Token 配置，或发送 `Authorization: Bearer <PAT_key>`；不要放入 URL。PAT 独立于 Web 登录会话，退出登录不会撤销它；在 MCP 服务页单独撤销或到期后立即失效。列表显示密钥尾号、权限、到期时间和最近使用时间（最多每分钟更新）。PAT 不能用于 Web 管理接口，也不是 Garmin 账号的 API Key。
+
+升级现有实例需先应用 `0007_personal_access_tokens.sql`（本地 `pnpm db:migrate:local`，部署流程自动执行远程迁移）。管理接口为 Owner 会话保护的 `GET/POST /api/v1/mcp/pats` 与 `POST /api/v1/mcp/pats/:id/revoke`；OAuth 授权清单与 PAT 独立撤销，互不影响。
 
 ## 密钥轮换
 

@@ -3,6 +3,7 @@ import { computed, onMounted, onBeforeUnmount, ref } from "vue";
 import { Button } from "base-ui-vue";
 import { useSession } from "../stores/session";
 import { useConnections } from "../stores/connections";
+import { useToasts } from "../stores/toasts";
 import { api } from "../api";
 import type { Dashboard } from "../../../../packages/shared/src";
 import Icon from "../components/Icon.vue";
@@ -12,11 +13,10 @@ import ActivityTable from "../components/ActivityTable.vue";
 import { numeric } from "../lib/format";
 const session = useSession();
 const connections = useConnections();
+const toasts = useToasts();
 const data = ref<Dashboard | null>(null);
-const error = ref("");
 const loading = ref(true);
 const syncing = ref(false);
-const notice = ref("");
 let timer: ReturnType<typeof setTimeout> | undefined;
 const cards = computed(() => [
   {
@@ -72,7 +72,6 @@ const trends = computed(() => [
   },
 ]);
 async function load() {
-  error.value = "";
   try {
     data.value = await api<Dashboard>("/api/v1/dashboard");
     await connections.load();
@@ -87,23 +86,22 @@ async function load() {
       timer = setTimeout(load, 10_000);
     }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "加载失败。";
+    toasts.add(e instanceof Error ? e.message : "加载失败。", "error");
   } finally {
     loading.value = false;
   }
 }
 async function sync() {
   syncing.value = true;
-  notice.value = "";
   try {
     await api("/api/v1/sync", {
       method: "POST",
       body: JSON.stringify({ stream: "all" }),
     });
-    notice.value = "同步已开始";
+    toasts.add("同步已开始");
     await load();
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "同步失败";
+    toasts.add(e instanceof Error ? e.message : "同步失败", "error");
   } finally {
     syncing.value = false;
   }
@@ -116,33 +114,37 @@ onBeforeUnmount(() => clearTimeout(timer));
     <div>
       <span class="eyebrow">YOUR DAILY PULSE</span>
       <h1>{{ session.owner?.name }}，你好<span class="warm-dot">。</span></h1>
-      <p>
-        {{ data?.date || "今天" }}
-        <span v-if="data">· {{ data.timezone }}</span>
+    </div>
+    <div class="overview-actions">
+      <div class="heading-actions">
+        <Button
+          class="button secondary"
+          aria-label="刷新数据"
+          :disabled="loading"
+          @click="load"
+          ><Icon name="refresh" :size="16" />刷新</Button
+        ><Button
+          v-if="connections.connected"
+          class="button secondary"
+          :disabled="syncing"
+          @click="sync"
+          ><Icon name="download" :size="16" />{{
+            syncing ? "提交中…" : "同步 Garmin"
+          }}</Button
+        >
+      </div>
+      <p class="data-source">
+        <span class="status-dot" />Garmin ·
+        {{
+          data?.freshness.lastSuccessfulSync
+            ? `上次同步 ${new Date(data.freshness.lastSuccessfulSync).toLocaleString("zh-CN")}`
+            : "尚未同步"
+        }}<span v-if="data?.freshness.status === 'stale'"
+          >· 数据可能已过期</span
+        >
       </p>
     </div>
-    <div class="heading-actions">
-      <Button
-        class="icon-button"
-        aria-label="刷新数据"
-        :disabled="loading"
-        @click="load"
-        ><Icon name="refresh" :size="18" /></Button
-      ><Button
-        v-if="connections.connected"
-        class="button secondary"
-        :disabled="syncing"
-        @click="sync"
-        ><Icon name="refresh" :size="16" />{{
-          syncing ? "提交中…" : "同步"
-        }}</Button
-      >
-    </div>
   </div>
-  <div v-if="error" class="notice error-text" role="alert">
-    {{ error }}<Button class="text-button" @click="load">重试</Button>
-  </div>
-  <p v-if="notice" class="success-text" role="status">{{ notice }}</p>
   <section v-if="!connections.connected" class="welcome-banner">
     <div class="banner-symbol"><Icon name="link" :size="26" /></div>
     <div>
@@ -213,12 +215,27 @@ onBeforeUnmount(() => clearTimeout(timer));
       :items="data.activities"
     /><EmptyState v-else icon="activity" title="暂无运动记录" description="" />
   </section>
-  <p class="data-source">
-    <span class="status-dot" />Garmin ·
-    {{
-      data?.freshness.lastSuccessfulSync
-        ? `上次同步 ${new Date(data.freshness.lastSuccessfulSync).toLocaleString("zh-CN")}`
-        : "尚未同步"
-    }}<span v-if="data?.freshness.status === 'stale'">· 数据可能已过期</span>
-  </p>
 </template>
+<style scoped>
+.page-heading {
+  flex-wrap: wrap;
+}
+.overview-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  max-width: 100%;
+  margin-left: auto;
+}
+.overview-actions .data-source {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  margin: 8px 0 0;
+  font-size: 10px;
+}
+.heading-actions .button {
+  height: 36px;
+  padding-block: 0;
+  white-space: nowrap;
+}
+</style>

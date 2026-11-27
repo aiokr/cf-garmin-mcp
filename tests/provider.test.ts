@@ -72,7 +72,10 @@ describe("Garmin protocol adapters (synthetic upstream responses)", () => {
             expires_in: 3600,
           });
         }
-        if (url.pathname.endsWith("/socialProfile"))
+        if (
+          url.pathname.endsWith("/socialProfile") ||
+          url.pathname.endsWith("/userprofile/settings")
+        )
           return json({ profileId: 42, displayName: "synthetic-owner" });
         throw new Error("Unexpected test upstream request");
       });
@@ -100,6 +103,75 @@ describe("Garmin protocol adapters (synthetic upstream responses)", () => {
       expect(exchange).toBe(2);
     },
   );
+
+  it.each(["CN", "GLOBAL"] as const)(
+    "uses the Personal API settings endpoint and headers for %s",
+    async (region) => {
+      const suffix = region === "CN" ? "garmin.cn" : "garmin.com";
+      const accessToken = token();
+      const mock = vi
+        .spyOn(globalThis, "fetch")
+        .mockImplementation(async (input, init) => {
+          const url = new URL(String(input));
+          const headers = new Headers(init?.headers);
+          expect(url.origin).toBe(`https://personal.connectapi.${suffix}`);
+          if (
+            url.pathname ===
+            "/personalapitoken-service/personal-api/personal-api-key/token"
+          ) {
+            expect(init?.method).toBe("POST");
+            expect(headers.get("Authorization")).toBe(
+              `ApiKey ${env.GARMIN_PERSONAL_API_KEY}`,
+            );
+            return new Response(accessToken);
+          }
+          // Reject the old endpoint: the real Personal API does not expose it.
+          if (url.pathname !== "/userprofile-service/userprofile/settings") {
+            return new Response(null, { status: 404 });
+          }
+          expect(headers.get("Authorization")).toBe(`Bearer ${accessToken}`);
+          expect(headers.get("Accept")).toBe("application/json");
+          expect(headers.has("X-Garmin-Client-Platform")).toBe(false);
+          expect(headers.has("X-GCExperience")).toBe(false);
+          expect(headers.has("User-Agent")).toBe(false);
+          return json({
+            displayName: "personal-owner",
+            preferredLocale: "zh_CN",
+          });
+        });
+      const personal = {
+        ...env,
+        GARMIN_REGION: region,
+        GARMIN_AUTH_MODE: "personal_api",
+      };
+      const result = await login(personal);
+      if (result.status !== "ok") throw new Error("Expected token");
+      expect(await identity(personal, result.tokens)).toEqual({
+        id: "personal:personal-owner",
+        displayName: "personal-owner",
+        name: "personal-owner",
+      });
+      expect(mock).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("does not accept locale alone as an account identity", async () => {
+    const mock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(json({ preferredLocale: "zh_CN" }));
+    await expect(
+      identity(env, { accessToken: token(), expiresAt: Date.now() + 3600_000 }),
+    ).rejects.toMatchObject({ code: "INVALID_PROVIDER_IDENTITY" });
+    mock.mockResolvedValue(json({ userProfilePk: 42, displayName: "owner" }));
+    expect(
+      (
+        await identity(env, {
+          accessToken: token(),
+          expiresAt: Date.now() + 3600_000,
+        })
+      ).id,
+    ).toBe("42");
+  });
 
   it("pauses for MFA and refuses CAPTCHA without attempting a bypass", async () => {
     const config = {
@@ -209,7 +281,7 @@ describe.sequential(
           exchanges++;
           return new Response(token());
         }
-        if (String(input).includes("/socialProfile"))
+        if (String(input).includes("/userprofile/settings"))
           return json({ profileId: 42, displayName: "synthetic-owner" });
         throw new Error("Unexpected test upstream request");
       });

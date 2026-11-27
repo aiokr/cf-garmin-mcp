@@ -3,16 +3,17 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { Button } from "base-ui-vue";
 import { api } from "../api";
+import { useToasts } from "../stores/toasts";
 import MetricChart from "../components/MetricChart.vue";
 import { numeric } from "../lib/format";
 const route = useRoute();
+const toasts = useToasts();
 const training = computed(() => route.path === "/training");
 const end = ref(new Date().toLocaleDateString("en-CA"));
 const start = ref(
   new Date(Date.now() - 29 * 86400_000).toLocaleDateString("en-CA"),
 );
 const items = ref<Record<string, unknown>[]>([]);
-const error = ref("");
 const loading = ref(false);
 const charts = computed(() =>
   training.value
@@ -79,7 +80,6 @@ function series(chart: { title: string; key: string; color: string }) {
 }
 async function load() {
   loading.value = true;
-  error.value = "";
   try {
     items.value = (
       await api<{ items: Record<string, unknown>[] }>(
@@ -87,7 +87,7 @@ async function load() {
       )
     ).items;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "加载失败";
+    toasts.add(e instanceof Error ? e.message : "加载失败", "error");
   } finally {
     loading.value = false;
   }
@@ -116,7 +116,6 @@ watch(training, load);
       >{{ loading ? "读取中…" : "查看" }}</Button
     >
   </form>
-  <p v-if="error" class="error-text" role="alert">{{ error }}</p>
   <div class="trend-grid">
     <section v-for="chart in charts" :key="chart.key" class="panel">
       <div class="panel-heading">

@@ -33,6 +33,7 @@ import {
   Gauge,
   ExternalLink,
   Copy,
+  Ellipsis,
 } from "@lucide/vue";
 import type { Component } from "vue";
 withDefaults(defineProps<{ name: string; size?: number }>(), { size: 20 });
@@ -70,6 +71,7 @@ const icons: Record<string, Component> = {
   gauge: Gauge,
   external: ExternalLink,
   copy: Copy,
+  more: Ellipsis,
 };
 </script>
 <template>

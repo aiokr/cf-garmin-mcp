@@ -37,6 +37,12 @@ const messages: Record<string, string> = {
   RATE_LIMITED: "请求过于频繁，请稍后重试。",
   NOT_FOUND: "内容不存在。",
   PROVIDER_REAUTH_REQUIRED: "请重新验证 Garmin 连接。",
+  PROVIDER_OPERATION_UNSUPPORTED:
+    "官方 Garmin Personal API 不提供训练状态、VO2max 和训练准备度；请使用支持这些指标的已授权连接。",
+  PROVIDER_DATA_UNAVAILABLE: "Garmin 接口或数据不可用，请检查账号区域配置。",
+  PROVIDER_UNAUTHORIZED: "Garmin 授权已失效，请检查个人 API Key 并重新验证。",
+  INVALID_PROVIDER_IDENTITY: "Garmin 返回的账号资料不完整，无法验证连接。",
+  UPSTREAM_NETWORK_ERROR: "无法访问 Garmin 服务，请检查网络后重试。",
   PROVIDER_CAPTCHA_REQUIRED:
     "Garmin 要求验证码验证，请先在 Garmin 完成验证后重试。",
   PROVIDER_BLOCKED: "Garmin 暂时拒绝了连接，请稍后重试。",

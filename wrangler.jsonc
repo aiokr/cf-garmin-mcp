@@ -15,7 +15,7 @@
   "vars": {
     "APP_URL": "http://localhost:8787",
     "APP_TIMEZONE": "Asia/Shanghai",
-    "GARMIN_AUTH_MODE": "personal_api",
+    "GARMIN_AUTH_MODE": "credentials",
     "GARMIN_REGION": "CN",
     "PROVIDER_KEY_VERSION": "1",
     "OSM_TILE_URL": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",

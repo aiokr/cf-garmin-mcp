@@ -3,6 +3,7 @@ import { computed, defineAsyncComponent, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { Button } from "base-ui-vue";
 import { api } from "../api";
+import { useToasts } from "../stores/toasts";
 import type { ActivitySummary } from "../../../../packages/shared/src";
 import Icon from "../components/Icon.vue";
 import MetricChart from "../components/MetricChart.vue";
@@ -11,6 +12,7 @@ const TrackMap = defineAsyncComponent(
   () => import("../components/TrackMap.vue"),
 );
 const route = useRoute();
+const toasts = useToasts();
 const activity = ref<
   (ActivitySummary & { files: { id: string; status: string }[] }) | null
 >(null);
@@ -19,9 +21,6 @@ const details = ref<{
   laps: Record<string, unknown>[];
   sampleCount: number;
 } | null>(null);
-const error = ref("");
-const fileError = ref("");
-const mapError = ref("");
 const coordinates = ref<[number, number][]>([]);
 const mapVisible = ref(false);
 const tileUrl = ref("");
@@ -46,8 +45,6 @@ const series = (key: string, name: string, color: string) => [
   },
 ];
 async function load() {
-  error.value = "";
-  fileError.value = "";
   try {
     activity.value = await api(
       `/api/v1/activities/${encodeURIComponent(String(route.params.id))}`,
@@ -58,16 +55,15 @@ async function load() {
           `/api/v1/activities/${encodeURIComponent(String(route.params.id))}/details`,
         );
       } catch (e) {
-        fileError.value = e instanceof Error ? e.message : "曲线不可用";
+        toasts.add(e instanceof Error ? e.message : "曲线不可用", "error");
       }
     }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : "加载失败";
+    toasts.add(e instanceof Error ? e.message : "加载失败", "error");
   }
 }
 async function showMap() {
   mapLoading.value = true;
-  mapError.value = "";
   try {
     const [track, settings] = await Promise.all([
       api<{ geometry: { coordinates: [number, number][] } }>(
@@ -79,7 +75,7 @@ async function showMap() {
     tileUrl.value = settings.mapTileUrl;
     mapVisible.value = true;
   } catch (e) {
-    mapError.value = e instanceof Error ? e.message : "轨迹不可用";
+    toasts.add(e instanceof Error ? e.message : "轨迹不可用", "error");
   } finally {
     mapLoading.value = false;
   }
@@ -90,7 +86,6 @@ onMounted(load);
   <RouterLink class="text-link back-link" to="/activities"
     ><Icon name="previous" :size="16" />运动记录</RouterLink
   >
-  <p v-if="error" role="alert" class="error-text">{{ error }}</p>
   <template v-if="activity"
     ><div class="page-heading">
       <div>
@@ -111,9 +106,7 @@ onMounted(load);
           :href="`/api/v1/activities/${activity.id}/files/${file.id}`"
           download
           ><Icon name="download" :size="16" />FIT</a
-        ><Button class="icon-button" aria-label="刷新详情" @click="load"
-          ><Icon name="refresh"
-        /></Button>
+        >
       </div>
     </div>
     <div class="detail-metrics">
@@ -166,7 +159,6 @@ onMounted(load);
           }}</Button
         >
       </div>
-      <p v-if="mapError" class="error-text" role="alert">{{ mapError }}</p>
       <TrackMap
         v-if="mapVisible"
         :coordinates="coordinates"
@@ -180,7 +172,6 @@ onMounted(load);
         }}
       </p>
     </section>
-    <p v-if="fileError" class="error-text" role="alert">{{ fileError }}</p>
     <div class="trend-grid">
       <section class="panel">
         <div class="panel-heading"><h2>心率</h2></div>
@@ -260,3 +251,15 @@ onMounted(load);
     </p></template
   >
 </template>
+<style scoped>
+.back-link {
+  color: var(--text-1);
+  font-size: 14px;
+  font-weight: 500;
+}
+.button {
+  height: 36px;
+  min-height: 36px;
+  padding-block: 0;
+}
+</style>

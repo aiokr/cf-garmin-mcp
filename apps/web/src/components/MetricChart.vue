@@ -55,6 +55,7 @@ function render() {
           value == null ? "—" : `${value}${props.unit || ""}`,
       },
       legend: {
+        show: props.series.length > 1,
         top: 0,
         textStyle: { color: style.getPropertyValue("--text-2").trim() },
       },
