@@ -586,6 +586,17 @@ test("deploy entry always provisions keys and Cloudflare template prompts only G
   }
 });
 
+test("weekly cron uses Cloudflare Sunday syntax and matches archive repair dispatch", () => {
+  const config = readDeployConfig(template);
+  assert.ok(config.triggers.crons.includes("30 2 * * SUN"));
+  assert.equal(config.triggers.crons.includes("30 2 * * 0"), false);
+  const scheduler = readFileSync(
+    new URL("../apps/worker/src/services/scheduler.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(scheduler.includes('cron === "30 2 * * SUN"'));
+});
+
 test("jurisdiction settings are passed to resource creation and checked on reuse", async () => {
   const text = fixture((config) => {
     config.d1_databases[0].jurisdiction = "eu";

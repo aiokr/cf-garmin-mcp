@@ -30,7 +30,7 @@ export async function reconcileRuns(env: Env) {
 export async function runScheduled(env: Env, cron: string) {
   await reconcileRuns(env);
   await pruneSyncHistory(env);
-  if (cron === "30 2 * * 0") await repairArchives(env);
+  if (cron === "30 2 * * SUN") await repairArchives(env);
   const rows = await env.DB.prepare(
     "SELECT c.* FROM provider_connections c LEFT JOIN owner_settings s ON s.user_id=c.user_id WHERE c.status='connected' AND COALESCE(s.auto_sync,1)=1",
   ).all<Connection>();
