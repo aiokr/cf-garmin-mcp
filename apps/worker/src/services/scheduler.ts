@@ -27,21 +27,27 @@ export async function reconcileRuns(env: Env) {
     }
   }
 }
-export async function runScheduled(env: Env, cron: string) {
+export async function runScheduled(env: Env, scheduledTime: number) {
+  // Use the event's scheduled UTC time so delayed delivery keeps its original slot.
+  const time = new Date(scheduledTime);
+  const minute = time.getUTCMinutes();
+  const hour = time.getUTCHours();
+  const weeklyMaintenance =
+    time.getUTCDay() === 0 && hour === 2 && minute === 30;
+  const streams: string[] = [];
+  if (minute === 0 || minute === 30) streams.push("activities", "files");
+  if (minute === 5) streams.push("health");
+  if (hour === 2 && minute === 15) streams.push("training");
+  // Sunday maintenance coincides with the half-hour activity/FIT sync.
+  if (weeklyMaintenance) streams.push("devices");
+  if (!streams.length) return;
+
   await reconcileRuns(env);
   await pruneSyncHistory(env);
-  if (cron === "30 2 * * SUN") await repairArchives(env);
+  if (weeklyMaintenance) await repairArchives(env);
   const rows = await env.DB.prepare(
     "SELECT c.* FROM provider_connections c LEFT JOIN owner_settings s ON s.user_id=c.user_id WHERE c.status='connected' AND COALESCE(s.auto_sync,1)=1",
   ).all<Connection>();
-  const streams =
-    cron === "*/30 * * * *"
-      ? ["activities", "files"]
-      : cron === "5 * * * *"
-        ? ["health"]
-        : cron === "15 2 * * *"
-          ? ["training"]
-          : ["devices"];
   for (const connection of rows.results) {
     const end = dateInZone(APP_TIMEZONE);
     for (const stream of streams) {

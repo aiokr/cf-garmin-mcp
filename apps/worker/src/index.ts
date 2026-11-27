@@ -300,6 +300,6 @@ export default Object.assign(app, {
     env: Env,
     ctx: ExecutionContext,
   ) => {
-    ctx.waitUntil(runScheduled(env, event.cron));
+    ctx.waitUntil(runScheduled(env, event.scheduledTime));
   },
 });

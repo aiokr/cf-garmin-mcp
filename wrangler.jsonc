@@ -51,7 +51,8 @@
     },
   ],
   "triggers": {
-    "crons": ["*/30 * * * *", "5 * * * *", "15 2 * * *", "30 2 * * SUN"],
+    // One account-level trigger; the scheduler dispatches tasks by UTC time.
+    "crons": ["0,5,15,30 * * * *"],
   },
   "observability": { "enabled": false },
 }
